@@ -5,6 +5,7 @@ const OFFSCREEN_DOC_URL = chrome.runtime.getURL("offscreen.html");
 // Manage cancellation of an active reading session
 let activeSessionId = null;
 const controllersBySession = new Map(); // sessionId -> Set<AbortController>
+let currentSession = { voice: null, model: null, provider: null };
 
 function cancelActiveSession() {
     const sessionId = activeSessionId;
@@ -19,6 +20,7 @@ function cancelActiveSession() {
         controllersBySession.delete(sessionId);
     }
     activeSessionId = null;
+    currentSession = { voice: null, model: null, provider: null };
 }
 
 async function ensureOffscreenDocument() {
@@ -199,6 +201,7 @@ async function startReadingCurrentPage(providerOverride, voiceOverride) {
             type: "webspeech_start",
             payload: { text },
         }).catch(() => {});
+        currentSession = { voice: null, model: null, provider: "webspeech" };
         return { provider: "webspeech", chunks: 1 };
     }
 
@@ -211,6 +214,13 @@ async function startReadingCurrentPage(providerOverride, voiceOverride) {
     }
 
     const chunks = chunkTextBySentences(text);
+
+    // Record current session details
+    currentSession = {
+        voice: voiceOverride || openaiVoice,
+        model: openaiModel,
+        provider: "openai",
+    };
 
     // Start a new session and prepare abort tracking
     const mySessionId = crypto?.randomUUID
@@ -296,6 +306,7 @@ async function startReadingCurrentPage(providerOverride, voiceOverride) {
             type: "webspeech_start",
             payload: { text },
         }).catch(() => {});
+        currentSession = { voice: null, model: null, provider: "webspeech" };
         return { provider: "webspeech", chunks: 1 };
     }
 }
@@ -339,7 +350,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (message?.type === "get_status") {
                 await ensureOffscreenDocument();
                 const res = await sendToOffscreen({ type: "get_status" });
-                sendResponse(res);
+                if (res?.ok) {
+                    sendResponse({
+                        ...res,
+                        voice: currentSession.voice,
+                        model: currentSession.model,
+                        providerUsed: currentSession.provider,
+                    });
+                } else {
+                    sendResponse(res);
+                }
                 return;
             }
         } catch (e) {

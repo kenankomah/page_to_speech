@@ -92,6 +92,20 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!res?.ok) return;
             playing = Boolean(res.playing || res.paused || res.queueLength > 0);
             paused = Boolean(res.paused);
+            // Set voice dropdown to match current session if available
+            if (res.providerUsed === "openai" && res.voice) {
+                const select = qs("voiceSelect");
+                const input = qs("voiceCustom");
+                if ([...select.options].some((o) => o.value === res.voice)) {
+                    select.value = res.voice;
+                    input.style.display = "none";
+                    input.value = "";
+                } else {
+                    select.value = "custom";
+                    input.style.display = "";
+                    input.value = res.voice;
+                }
+            }
             updateToggleLabel();
         })
         .catch(() => {});
