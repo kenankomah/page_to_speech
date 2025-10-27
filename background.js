@@ -100,6 +100,32 @@ async function fetchOpenAISpeech(apiKey, model, voice, text) {
     return arrayBuffer; // Return raw audio data (mp3)
 }
 
+async function sendToOffscreen(message) {
+    await ensureOffscreenDocument();
+    try {
+        return await chrome.runtime.sendMessage({
+            target: "offscreen",
+            ...message,
+        });
+    } catch (e) {
+        // Retry once after a brief delay in case the offscreen doc was just recreated
+        await new Promise((r) => setTimeout(r, 150));
+        await ensureOffscreenDocument();
+        return await chrome.runtime.sendMessage({
+            target: "offscreen",
+            ...message,
+        });
+    }
+}
+
+function isOffscreenSupported() {
+    try {
+        return Boolean(chrome.offscreen?.createDocument);
+    } catch {
+        return false;
+    }
+}
+
 async function startReadingCurrentPage(providerOverride) {
     const [activeTab] = await chrome.tabs.query({
         active: true,
@@ -120,18 +146,24 @@ async function startReadingCurrentPage(providerOverride) {
         openaiModel: "gpt-4o-mini-tts",
         openaiVoice: "alloy",
     });
-    const effectiveProvider = providerOverride || provider;
+    let effectiveProvider = providerOverride || provider;
 
-    await ensureOffscreenDocument();
+    // If offscreen isn't available (older Chrome), auto-fallback to Web Speech
+    if (effectiveProvider !== "webspeech" && !isOffscreenSupported()) {
+        effectiveProvider = "webspeech";
+    }
 
     if (effectiveProvider === "webspeech") {
-        await chrome.runtime.sendMessage({
-            target: "offscreen",
+        // Best-effort ensure offscreen exists if it's used to host speech
+        await ensureOffscreenDocument().catch(() => {});
+        await sendToOffscreen({
             type: "webspeech_start",
             payload: { text },
-        });
+        }).catch(() => {});
         return { provider: "webspeech", chunks: 1 };
     }
+
+    await ensureOffscreenDocument();
 
     if (!openaiApiKey) {
         throw new Error(
@@ -140,32 +172,35 @@ async function startReadingCurrentPage(providerOverride) {
     }
 
     const chunks = chunkTextBySentences(text);
-    // Notify offscreen to prepare queue
-    await chrome.runtime.sendMessage({
-        target: "offscreen",
-        type: "queue_reset",
-    });
 
-    for (let i = 0; i < chunks.length; i++) {
-        const c = chunks[i];
-        const audioBuffer = await fetchOpenAISpeech(
-            openaiApiKey,
-            openaiModel,
-            openaiVoice,
-            c
-        );
-        const buf = Array.from(new Uint8Array(audioBuffer));
-        await chrome.runtime.sendMessage({
-            target: "offscreen",
-            type: "queue_append_audio",
-            payload: { buffer: buf, mime: "audio/mpeg" },
-        });
+    try {
+        // Notify offscreen to prepare queue
+        await sendToOffscreen({ type: "queue_reset" });
+        for (let i = 0; i < chunks.length; i++) {
+            const c = chunks[i];
+            const audioBuffer = await fetchOpenAISpeech(
+                openaiApiKey,
+                openaiModel,
+                openaiVoice,
+                c
+            );
+            const buf = Array.from(new Uint8Array(audioBuffer));
+            await sendToOffscreen({
+                type: "queue_append_audio",
+                payload: { buffer: buf, mime: "audio/mpeg" },
+            });
+        }
+        await sendToOffscreen({ type: "queue_play" });
+        return { provider: "openai", chunks: chunks.length };
+    } catch (e) {
+        // Fallback to Web Speech if offscreen messaging/audio queue fails
+        await sendToOffscreen({ type: "stop" }).catch(() => {});
+        await sendToOffscreen({
+            type: "webspeech_start",
+            payload: { text },
+        }).catch(() => {});
+        return { provider: "webspeech", chunks: 1 };
     }
-    await chrome.runtime.sendMessage({
-        target: "offscreen",
-        type: "queue_play",
-    });
-    return { provider: "openai", chunks: chunks.length };
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -183,28 +218,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
             if (message?.type === "pause") {
                 await ensureOffscreenDocument();
-                await chrome.runtime.sendMessage({
-                    target: "offscreen",
-                    type: "pause",
-                });
+                await sendToOffscreen({ type: "pause" });
                 sendResponse({ ok: true });
                 return;
             }
             if (message?.type === "resume") {
                 await ensureOffscreenDocument();
-                await chrome.runtime.sendMessage({
-                    target: "offscreen",
-                    type: "resume",
-                });
+                await sendToOffscreen({ type: "resume" });
                 sendResponse({ ok: true });
                 return;
             }
             if (message?.type === "stop") {
                 await ensureOffscreenDocument();
-                await chrome.runtime.sendMessage({
-                    target: "offscreen",
-                    type: "stop",
-                });
+                await sendToOffscreen({ type: "stop" });
                 sendResponse({ ok: true });
                 return;
             }
