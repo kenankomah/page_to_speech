@@ -32,6 +32,17 @@ async function send(type, extra = {}) {
     return await chrome.runtime.sendMessage({ type, ...extra });
 }
 
+let playing = false;
+let paused = false;
+
+function updateToggleLabel() {
+    const btn = qs("toggle");
+    if (!btn) return;
+    if (!playing) btn.textContent = "Read";
+    else if (paused) btn.textContent = "Resume";
+    else btn.textContent = "Pause";
+}
+
 async function onRead() {
     setStatus("Extracting and generating audio...");
     const provider = qs("provider").value;
@@ -57,26 +68,39 @@ async function onRead() {
             (res.chunks || 1) > 1 ? "s" : ""
         })`
     );
+    playing = true;
+    paused = false;
+    updateToggleLabel();
 }
 
-async function onPause() {
-    await send("pause").catch(() => {});
-}
-async function onResume() {
-    await send("resume").catch(() => {});
-}
 async function onStop() {
     await send("stop").catch(() => {});
     setStatus("Stopped");
+    playing = false;
+    paused = false;
+    updateToggleLabel();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
     // Pre-warm offscreen so playback can start sooner
     chrome.runtime.sendMessage({ type: "pause" }).catch(() => {});
     loadSettings();
-    qs("read").addEventListener("click", onRead);
-    qs("pause").addEventListener("click", onPause);
-    qs("resume").addEventListener("click", onResume);
+    const toggleBtn = qs("toggle");
+    if (toggleBtn) {
+        toggleBtn.addEventListener("click", async () => {
+            if (!playing) {
+                await onRead();
+            } else if (!paused) {
+                await send("pause").catch(() => {});
+                paused = true;
+                updateToggleLabel();
+            } else {
+                await send("resume").catch(() => {});
+                paused = false;
+                updateToggleLabel();
+            }
+        });
+    }
     qs("stop").addEventListener("click", onStop);
     qs("optionsLink").addEventListener("click", (e) => {
         e.preventDefault();
