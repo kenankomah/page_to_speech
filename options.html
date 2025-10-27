@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Reader Options</title>
+        <style>
+            body {
+                font: 14px system-ui, -apple-system, Segoe UI, Roboto, Arial;
+                margin: 16px;
+                max-width: 720px;
+            }
+            .row {
+                display: flex;
+                gap: 12px;
+                margin-bottom: 12px;
+                align-items: center;
+            }
+            .row label {
+                width: 160px;
+            }
+            input[type="text"],
+            input[type="password"],
+            select {
+                flex: 1;
+                padding: 6px 8px;
+            }
+            .section {
+                margin: 16px 0;
+                padding: 12px;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+            }
+            .btns {
+                display: flex;
+                gap: 8px;
+            }
+            .status {
+                color: #555;
+                min-height: 18px;
+            }
+        </style>
+    </head>
+    <body>
+        <h2>Page to Speech Reader - Options</h2>
+
+        <div class="row">
+            <label for="provider">Provider</label>
+            <select id="provider">
+                <option value="openai">OpenAI TTS</option>
+                <option value="webspeech">Web Speech (browser)</option>
+            </select>
+        </div>
+
+        <div class="section">
+            <h3>OpenAI Settings</h3>
+            <div class="row">
+                <label for="openaiApiKey">API Key</label>
+                <input type="password" id="openaiApiKey" placeholder="sk-..." />
+            </div>
+            <div class="row">
+                <label for="openaiModel">Model</label>
+                <input type="text" id="openaiModel" value="gpt-4o-mini-tts" />
+            </div>
+            <div class="row">
+                <label for="openaiVoice">Voice</label>
+                <input type="text" id="openaiVoice" value="alloy" />
+            </div>
+        </div>
+
+        <div class="btns">
+            <button id="save">Save</button>
+            <button id="test">Test</button>
+        </div>
+        <div class="status" id="status"></div>
+
+        <script src="options.js"></script>
+    </body>
+</html>
