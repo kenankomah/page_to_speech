@@ -71,6 +71,8 @@ async function onStop() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    // Pre-warm offscreen so playback can start sooner
+    chrome.runtime.sendMessage({ type: "pause" }).catch(() => {});
     loadSettings();
     qs("read").addEventListener("click", onRead);
     qs("pause").addEventListener("click", onPause);

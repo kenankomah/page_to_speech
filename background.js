@@ -2,6 +2,25 @@
 
 const OFFSCREEN_DOC_URL = chrome.runtime.getURL("offscreen.html");
 
+// Manage cancellation of an active reading session
+let activeSessionId = null;
+const controllersBySession = new Map(); // sessionId -> Set<AbortController>
+
+function cancelActiveSession() {
+    const sessionId = activeSessionId;
+    if (!sessionId) return;
+    const set = controllersBySession.get(sessionId);
+    if (set) {
+        for (const c of set) {
+            try {
+                c.abort();
+            } catch {}
+        }
+        controllersBySession.delete(sessionId);
+    }
+    activeSessionId = null;
+}
+
 async function ensureOffscreenDocument() {
     const hasDocument = await chrome.offscreen.hasDocument?.();
     if (!hasDocument) {
@@ -27,7 +46,7 @@ async function ensureOffscreenDocument() {
     throw new Error("Offscreen document did not become ready");
 }
 
-function chunkTextBySentences(text, maxLen = 2800) {
+function chunkTextBySentences(text, maxLen = 600) {
     const sentences = text
         .replace(/\s+/g, " ")
         .split(/(?<=[.!?])\s+(?=[A-Z0-9"'\(\[])|\n+/);
@@ -77,7 +96,14 @@ async function extractPageText(tabId) {
     return (result || "").trim();
 }
 
-async function fetchOpenAISpeech(apiKey, model, voice, text) {
+async function fetchOpenAISpeech(
+    apiKey,
+    model,
+    voice,
+    text,
+    format = "mp3",
+    signal
+) {
     const res = await fetch("https://api.openai.com/v1/audio/speech", {
         method: "POST",
         headers: {
@@ -88,8 +114,9 @@ async function fetchOpenAISpeech(apiKey, model, voice, text) {
             model: model || "gpt-4o-mini-tts",
             voice: voice || "alloy",
             input: text,
-            format: "mp3",
+            format,
         }),
+        signal,
     });
     if (!res.ok) {
         const textErr = await res.text().catch(() => "");
@@ -132,7 +159,19 @@ async function startReadingCurrentPage(providerOverride, voiceOverride) {
         currentWindow: true,
     });
     if (!activeTab?.id) throw new Error("No active tab");
-    const text = await extractPageText(activeTab.id);
+    // Prefer selected text if available
+    let text = "";
+    try {
+        const [{ result: selected }] = await chrome.scripting.executeScript({
+            target: { tabId: activeTab.id },
+            func: () => window.getSelection()?.toString() || "",
+            world: "MAIN",
+        });
+        text = (selected || "").trim();
+    } catch {}
+    if (!text) {
+        text = await extractPageText(activeTab.id);
+    }
     if (!text) throw new Error("Could not extract text from page");
 
     const {
@@ -173,24 +212,82 @@ async function startReadingCurrentPage(providerOverride, voiceOverride) {
 
     const chunks = chunkTextBySentences(text);
 
+    // Start a new session and prepare abort tracking
+    const mySessionId = crypto?.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`;
+    activeSessionId = mySessionId;
+    controllersBySession.set(mySessionId, new Set());
+
     try {
         // Notify offscreen to prepare queue
         await sendToOffscreen({ type: "queue_reset" });
-        for (let i = 0; i < chunks.length; i++) {
-            const c = chunks[i];
-            const audioBuffer = await fetchOpenAISpeech(
-                openaiApiKey,
-                openaiModel,
-                voiceOverride || openaiVoice,
-                c
-            );
-            const buf = Array.from(new Uint8Array(audioBuffer));
-            await sendToOffscreen({
-                type: "queue_append_audio",
-                payload: { buffer: buf, mime: "audio/mpeg" },
-            });
+
+        // Fetch and enqueue first chunk, start playback ASAP
+        // Use WAV for the first chunk to reduce synthesis latency, then MP3 for the rest
+        const firstController = new AbortController();
+        controllersBySession.get(mySessionId)?.add(firstController);
+        const firstBufAB = await fetchOpenAISpeech(
+            openaiApiKey,
+            openaiModel,
+            voiceOverride || openaiVoice,
+            chunks[0] || "",
+            "wav",
+            firstController.signal
+        );
+        controllersBySession.get(mySessionId)?.delete(firstController);
+        if (activeSessionId !== mySessionId) {
+            // Session was cancelled; do not enqueue
+            return { provider: "openai", chunks: chunks.length };
         }
+        const firstBuf = Array.from(new Uint8Array(firstBufAB));
+        await sendToOffscreen({
+            type: "queue_append_audio",
+            payload: { buffer: firstBuf, mime: "audio/wav" },
+        });
         await sendToOffscreen({ type: "queue_play" });
+
+        // Pipeline remaining chunks with limited concurrency
+        const CONCURRENCY = 3;
+        let inFlight = 0;
+        let nextIndex = 1;
+        const total = chunks.length;
+
+        const launch = () => {
+            while (inFlight < CONCURRENCY && nextIndex < total) {
+                const idx = nextIndex++;
+                inFlight++;
+                const controller = new AbortController();
+                controllersBySession.get(mySessionId)?.add(controller);
+                fetchOpenAISpeech(
+                    openaiApiKey,
+                    openaiModel,
+                    voiceOverride || openaiVoice,
+                    chunks[idx],
+                    "mp3",
+                    controller.signal
+                )
+                    .then((ab) => {
+                        controllersBySession
+                            .get(mySessionId)
+                            ?.delete(controller);
+                        if (activeSessionId !== mySessionId) return;
+                        const b = Array.from(new Uint8Array(ab));
+                        return sendToOffscreen({
+                            type: "queue_append_audio",
+                            payload: { buffer: b, mime: "audio/mpeg" },
+                        });
+                    })
+                    .catch(() => {})
+                    .finally(() => {
+                        inFlight--;
+                        launch();
+                    });
+            }
+        };
+        launch(); // fire-and-forget
+
+        // Return immediately after starting playback
         return { provider: "openai", chunks: chunks.length };
     } catch (e) {
         // Fallback to Web Speech if offscreen messaging/audio queue fails
@@ -232,6 +329,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 return;
             }
             if (message?.type === "stop") {
+                // Cancel all in-flight TTS requests and prevent further queueing
+                cancelActiveSession();
                 await ensureOffscreenDocument();
                 await sendToOffscreen({ type: "stop" });
                 sendResponse({ ok: true });
