@@ -85,6 +85,16 @@ document.addEventListener("DOMContentLoaded", () => {
     // Pre-warm offscreen so playback can start sooner
     chrome.runtime.sendMessage({ type: "pause" }).catch(() => {});
     loadSettings();
+    // Initialize toggle label from current playback status
+    chrome.runtime
+        .sendMessage({ type: "get_status" })
+        .then((res) => {
+            if (!res?.ok) return;
+            playing = Boolean(res.playing || res.paused || res.queueLength > 0);
+            paused = Boolean(res.paused);
+            updateToggleLabel();
+        })
+        .catch(() => {});
     const toggleBtn = qs("toggle");
     if (toggleBtn) {
         toggleBtn.addEventListener("click", async () => {

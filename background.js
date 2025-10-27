@@ -336,6 +336,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 sendResponse({ ok: true });
                 return;
             }
+            if (message?.type === "get_status") {
+                await ensureOffscreenDocument();
+                const res = await sendToOffscreen({ type: "get_status" });
+                sendResponse(res);
+                return;
+            }
         } catch (e) {
             sendResponse({ ok: false, error: e?.message || String(e) });
         }

@@ -116,6 +116,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             sendResponse?.({ ok: true });
             return;
         }
+        if (message.type === "get_status") {
+            let playing = false;
+            let paused = false;
+            let provider = useWebSpeech ? "webspeech" : "audio";
+            if (useWebSpeech) {
+                const synth = window.speechSynthesis;
+                playing = Boolean(synth?.speaking);
+                paused = Boolean(synth?.paused);
+            } else {
+                paused = Boolean(audioEl?.paused);
+                playing = Boolean(isPlaying) && !paused;
+            }
+            sendResponse?.({
+                ok: true,
+                playing,
+                paused,
+                provider,
+                queueLength: queue.length,
+            });
+            return;
+        }
         if (message.type === "queue_reset") {
             resetQueue();
             sendResponse?.({ ok: true });
