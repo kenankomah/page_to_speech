@@ -82,8 +82,6 @@ async function onStop() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    // Pre-warm offscreen so playback can start sooner
-    chrome.runtime.sendMessage({ type: "pause" }).catch(() => {});
     loadSettings();
     // Initialize toggle label from current playback status
     chrome.runtime
