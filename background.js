@@ -126,7 +126,7 @@ function isOffscreenSupported() {
     }
 }
 
-async function startReadingCurrentPage(providerOverride) {
+async function startReadingCurrentPage(providerOverride, voiceOverride) {
     const [activeTab] = await chrome.tabs.query({
         active: true,
         currentWindow: true,
@@ -181,7 +181,7 @@ async function startReadingCurrentPage(providerOverride) {
             const audioBuffer = await fetchOpenAISpeech(
                 openaiApiKey,
                 openaiModel,
-                openaiVoice,
+                voiceOverride || openaiVoice,
                 c
             );
             const buf = Array.from(new Uint8Array(audioBuffer));
@@ -212,7 +212,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 return;
             }
             if (message?.type === "read_current_page") {
-                const res = await startReadingCurrentPage(message?.provider);
+                const res = await startReadingCurrentPage(
+                    message?.provider,
+                    message?.openaiVoice
+                );
                 sendResponse({ ok: true, ...res });
                 return;
             }

@@ -13,15 +13,32 @@ async function load() {
     qs("provider").value = data.provider;
     qs("openaiApiKey").value = data.openaiApiKey || "";
     qs("openaiModel").value = data.openaiModel || "gpt-4o-mini-tts";
-    qs("openaiVoice").value = data.openaiVoice || "alloy";
+    const voice = data.openaiVoice || "alloy";
+    const select = qs("openaiVoiceSelect");
+    const input = qs("openaiVoice");
+    if ([...select.options].some((o) => o.value === voice)) {
+        select.value = voice;
+        input.style.display = "none";
+        input.value = "";
+    } else {
+        select.value = "custom";
+        input.style.display = "";
+        input.value = voice;
+    }
 }
 
 async function save() {
+    const select = qs("openaiVoiceSelect");
+    const input = qs("openaiVoice");
+    const chosenVoice =
+        select.value === "custom"
+            ? input.value.trim() || "alloy"
+            : select.value;
     const payload = {
         provider: qs("provider").value,
         openaiApiKey: qs("openaiApiKey").value.trim(),
         openaiModel: qs("openaiModel").value.trim() || "gpt-4o-mini-tts",
-        openaiVoice: qs("openaiVoice").value.trim() || "alloy",
+        openaiVoice: chosenVoice,
     };
     await chrome.storage.local.set(payload);
     setStatus("Saved");
@@ -51,4 +68,16 @@ document.addEventListener("DOMContentLoaded", () => {
     load();
     qs("save").addEventListener("click", save);
     qs("test").addEventListener("click", test);
+    const select = qs("openaiVoiceSelect");
+    const input = qs("openaiVoice");
+    if (select) {
+        select.addEventListener("change", () => {
+            if (select.value === "custom") {
+                input.style.display = "";
+                input.focus();
+            } else {
+                input.style.display = "none";
+            }
+        });
+    }
 });

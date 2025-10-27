@@ -3,10 +3,23 @@ function qs(id) {
 }
 
 async function loadSettings() {
-    const { provider = "openai" } = await chrome.storage.local.get({
+    const defaults = {
         provider: "openai",
-    });
+        openaiVoice: "alloy",
+    };
+    const { provider, openaiVoice } = await chrome.storage.local.get(defaults);
     qs("provider").value = provider;
+    const select = qs("voiceSelect");
+    const input = qs("voiceCustom");
+    if ([...select.options].some((o) => o.value === openaiVoice)) {
+        select.value = openaiVoice;
+        input.style.display = "none";
+        input.value = "";
+    } else {
+        select.value = "custom";
+        input.style.display = "";
+        input.value = openaiVoice;
+    }
 }
 
 function setStatus(text, isError = false) {
@@ -22,7 +35,16 @@ async function send(type, extra = {}) {
 async function onRead() {
     setStatus("Extracting and generating audio...");
     const provider = qs("provider").value;
-    const res = await send("read_current_page", { provider }).catch((e) => ({
+    const voiceSel = qs("voiceSelect");
+    const voiceInp = qs("voiceCustom");
+    const openaiVoice =
+        voiceSel.value === "custom"
+            ? voiceInp.value.trim() || "alloy"
+            : voiceSel.value;
+    const res = await send("read_current_page", {
+        provider,
+        openaiVoice,
+    }).catch((e) => ({
         ok: false,
         error: e?.message || String(e),
     }));
@@ -57,5 +79,15 @@ document.addEventListener("DOMContentLoaded", () => {
     qs("optionsLink").addEventListener("click", (e) => {
         e.preventDefault();
         if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
+    });
+    const voiceSel = qs("voiceSelect");
+    const voiceInp = qs("voiceCustom");
+    voiceSel.addEventListener("change", () => {
+        if (voiceSel.value === "custom") {
+            voiceInp.style.display = "";
+            voiceInp.focus();
+        } else {
+            voiceInp.style.display = "none";
+        }
     });
 });
