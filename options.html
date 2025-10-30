@@ -4,96 +4,231 @@
         <meta charset="utf-8" />
         <title>Reader Options</title>
         <style>
-            body {
-                font: 14px system-ui, -apple-system, Segoe UI, Roboto, Arial;
-                margin: 16px;
-                max-width: 720px;
+            :root {
+                --bg: #f6f7f9;
+                --fg: #111827;
+                --muted: #6b7280;
+                --surface: #ffffff;
+                --border: #e5e7eb;
+                --primary: #3b82f6;
+                --primary-contrast: #ffffff;
+                --radius: 12px;
+                --shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
             }
+
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --bg: #0b1020;
+                    --fg: #e5e7eb;
+                    --muted: #9ca3af;
+                    --surface: #0f172a;
+                    --border: #1f2a44;
+                    --primary: #60a5fa;
+                    --primary-contrast: #0b1020;
+                    --shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+                }
+            }
+
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+                background: radial-gradient(
+                        1400px 500px at -10% -10%,
+                        rgba(59, 130, 246, 0.12),
+                        transparent 35%
+                    ),
+                    radial-gradient(
+                        1000px 400px at 120% 0%,
+                        rgba(20, 184, 166, 0.1),
+                        transparent 32%
+                    ),
+                    var(--bg);
+                color: var(--fg);
+                font: 14px system-ui, -apple-system, Segoe UI, Roboto, Arial;
+            }
+
+            .container {
+                max-width: 760px;
+                margin: 20px auto;
+                padding: 18px;
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                box-shadow: var(--shadow);
+            }
+
+            h2 {
+                margin: 0 0 14px 0;
+            }
+
             .row {
                 display: flex;
                 gap: 12px;
                 margin-bottom: 12px;
                 align-items: center;
             }
+
             .row label {
                 width: 160px;
+                font-weight: 600;
             }
+
+            .input-group {
+                display: flex;
+                gap: 10px;
+                flex: 1;
+            }
+
             input[type="text"],
             input[type="password"],
             select {
                 flex: 1;
-                padding: 6px 8px;
+                padding: 8px 10px;
+                background: color-mix(in srgb, var(--surface) 92%, var(--bg));
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                color: var(--fg);
+                outline: none;
+                transition: border-color 160ms ease, box-shadow 160ms ease,
+                    background 160ms ease;
             }
+
+            input[type="text"]:focus,
+            input[type="password"]:focus,
+            select:focus {
+                border-color: color-mix(
+                    in srgb,
+                    var(--primary) 60%,
+                    var(--border)
+                );
+                box-shadow: 0 0 0 3px
+                    color-mix(in srgb, var(--primary) 20%, transparent);
+            }
+
             .section {
                 margin: 16px 0;
                 padding: 12px;
-                border: 1px solid #ddd;
-                border-radius: 8px;
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                background: color-mix(in srgb, var(--surface) 98%, var(--bg));
             }
+
             .btns {
                 display: flex;
-                gap: 8px;
+                gap: 10px;
             }
+
+            button {
+                appearance: none;
+                border: 1px solid var(--border);
+                background: color-mix(in srgb, var(--surface) 92%, var(--bg));
+                color: var(--fg);
+                padding: 8px 12px;
+                border-radius: 10px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: transform 120ms ease, box-shadow 160ms ease,
+                    background 160ms ease, border-color 160ms ease;
+            }
+
+            button:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+            }
+            button:active {
+                transform: translateY(0);
+            }
+
+            button.primary {
+                background: linear-gradient(
+                    180deg,
+                    color-mix(in srgb, var(--primary) 94%, #fff 6%),
+                    var(--primary)
+                );
+                color: var(--primary-contrast);
+                border-color: color-mix(
+                    in srgb,
+                    var(--primary) 70%,
+                    var(--border)
+                );
+            }
+
+            button.ghost {
+                background: transparent;
+            }
+
             .status {
-                color: #555;
+                color: var(--muted);
                 min-height: 18px;
+                margin-top: 6px;
             }
         </style>
     </head>
     <body>
-        <h2>Page to Speech Reader - Options</h2>
+        <div class="container">
+            <h2>Page to Speech Reader - Options</h2>
 
-        <div class="row">
-            <label for="provider">Provider</label>
-            <select id="provider">
-                <option value="openai">OpenAI TTS</option>
-                <option value="webspeech">Web Speech (browser)</option>
-            </select>
-        </div>
+            <div class="row">
+                <label for="provider">Provider</label>
+                <select id="provider">
+                    <option value="openai">OpenAI TTS</option>
+                    <option value="webspeech">Web Speech (browser)</option>
+                </select>
+            </div>
 
-        <div class="section">
-            <h3>OpenAI Settings</h3>
-            <div class="row">
-                <label for="openaiApiKey">API Key</label>
-                <input type="password" id="openaiApiKey" placeholder="sk-..." />
-            </div>
-            <div class="row">
-                <label for="openaiModel">Model</label>
-                <input type="text" id="openaiModel" value="gpt-4o-mini-tts" />
-            </div>
-            <div class="row">
-                <label for="openaiVoice">Voice</label>
-                <div style="flex: 1; display: flex; gap: 8px">
-                    <select id="voiceSelect" style="flex: 1">
-                        <option value="alloy">alloy</option>
-                        <option value="verse">verse</option>
-                        <option value="ash">ash</option>
-                        <option value="coral">coral</option>
-                        <option value="echo">echo</option>
-                        <option value="fable">fable</option>
-                        <option value="nova">nova</option>
-                        <option value="onyx">onyx</option>
-                        <option value="sage">sage</option>
-                        <option value="shimmer">shimmer</option>
-                        <option value="ballad">ballad</option>
-                        <option value="clear">clear</option>
-                        <option value="custom">Custom…</option>
-                    </select>
+            <div class="section">
+                <h3>OpenAI Settings</h3>
+                <div class="row">
+                    <label for="openaiApiKey">API Key</label>
                     <input
-                        type="text"
-                        id="openaiVoice"
-                        placeholder="custom voice id"
-                        style="display: none"
+                        type="password"
+                        id="openaiApiKey"
+                        placeholder="sk-..."
                     />
                 </div>
+                <div class="row">
+                    <label for="openaiModel">Model</label>
+                    <input
+                        type="text"
+                        id="openaiModel"
+                        value="gpt-4o-mini-tts"
+                    />
+                </div>
+                <div class="row">
+                    <label for="openaiVoice">Voice</label>
+                    <div class="input-group">
+                        <select id="openaiVoiceSelect">
+                            <option value="alloy">alloy</option>
+                            <option value="verse">verse</option>
+                            <option value="ash">ash</option>
+                            <option value="coral">coral</option>
+                            <option value="echo">echo</option>
+                            <option value="fable">fable</option>
+                            <option value="nova">nova</option>
+                            <option value="onyx">onyx</option>
+                            <option value="sage">sage</option>
+                            <option value="shimmer">shimmer</option>
+                            <option value="ballad">ballad</option>
+                            <option value="clear">clear</option>
+                            <option value="custom">Custom…</option>
+                        </select>
+                        <input
+                            type="text"
+                            id="openaiVoice"
+                            placeholder="custom voice id"
+                            style="display: none"
+                        />
+                    </div>
+                </div>
             </div>
-        </div>
 
-        <div class="btns">
-            <button id="save">Save</button>
-            <button id="test">Test</button>
+            <div class="btns">
+                <button id="save" class="primary">Save</button>
+                <button id="test" class="ghost">Test</button>
+            </div>
+            <div class="status" id="status"></div>
         </div>
-        <div class="status" id="status"></div>
 
         <script src="options.js"></script>
     </body>

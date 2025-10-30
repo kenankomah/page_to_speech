@@ -4,71 +4,49 @@
         <meta charset="utf-8" />
         <title>Read this page</title>
         <link rel="stylesheet" href="popup.css" />
-        <style>
-            body {
-                font: 14px system-ui, -apple-system, Segoe UI, Roboto, Arial;
-                margin: 12px;
-                min-width: 280px;
-            }
-            .row {
-                display: flex;
-                gap: 8px;
-                margin-bottom: 8px;
-                align-items: center;
-            }
-            button {
-                padding: 6px 10px;
-            }
-            select,
-            input {
-                padding: 4px 6px;
-            }
-            .status {
-                min-height: 18px;
-                color: #555;
-            }
-        </style>
     </head>
     <body>
-        <div class="row">
-            <label for="provider">Provider</label>
-            <select id="provider">
-                <option value="openai">OpenAI TTS</option>
-                <option value="webspeech">Web Speech (browser)</option>
-            </select>
-        </div>
-        <div class="row">
-            <label for="voiceSelect">Voice</label>
-            <div style="flex: 1; display: flex; gap: 8px">
-                <select id="voiceSelect" style="flex: 1">
-                    <option value="alloy">alloy</option>
-                    <option value="verse">verse</option>
-                    <option value="ash">ash</option>
-                    <option value="coral">coral</option>
-                    <option value="echo">echo</option>
-                    <option value="fable">fable</option>
-                    <option value="nova">nova</option>
-                    <option value="onyx">onyx</option>
-                    <option value="sage">sage</option>
-                    <option value="shimmer">shimmer</option>
-                    <option value="ballad">ballad</option>
-                    <option value="clear">clear</option>
-                    <option value="custom">Custom…</option>
+        <div class="panel">
+            <div class="row">
+                <label for="provider">Provider</label>
+                <select id="provider">
+                    <option value="openai">OpenAI TTS</option>
+                    <option value="webspeech">Web Speech (browser)</option>
                 </select>
-                <input
-                    type="text"
-                    id="voiceCustom"
-                    placeholder="custom voice id"
-                    style="display: none"
-                />
             </div>
+            <div class="row">
+                <label for="voiceSelect">Voice</label>
+                <div class="input-group">
+                    <select id="voiceSelect">
+                        <option value="alloy">alloy</option>
+                        <option value="verse">verse</option>
+                        <option value="ash">ash</option>
+                        <option value="coral">coral</option>
+                        <option value="echo">echo</option>
+                        <option value="fable">fable</option>
+                        <option value="nova">nova</option>
+                        <option value="onyx">onyx</option>
+                        <option value="sage">sage</option>
+                        <option value="shimmer">shimmer</option>
+                        <option value="ballad">ballad</option>
+                        <option value="clear">clear</option>
+                        <option value="custom">Custom…</option>
+                    </select>
+                    <input
+                        type="text"
+                        id="voiceCustom"
+                        placeholder="custom voice id"
+                        style="display: none"
+                    />
+                </div>
+            </div>
+            <div class="row">
+                <button id="toggle" class="primary">Read</button>
+                <button id="stop" class="ghost">Stop</button>
+            </div>
+            <div class="row"><a id="optionsLink" href="#">Options</a></div>
+            <div class="status" id="status"></div>
         </div>
-        <div class="row">
-            <button id="toggle">Read</button>
-            <button id="stop">Stop</button>
-        </div>
-        <div class="row"><a id="optionsLink" href="#">Options</a></div>
-        <div class="status" id="status"></div>
         <script src="popup.js"></script>
     </body>
 </html>
