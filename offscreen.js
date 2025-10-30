@@ -8,12 +8,25 @@ let isPlaying = false;
 let useWebSpeech = false;
 let speechUtterances = [];
 
+// Timing state
+let totalDurationSec = 0; // sum of durations of all enqueued audio (or estimate for webspeech)
+let consumedDurationSec = 0; // sum of durations already finished (or elapsed for webspeech)
+let currentTrackDurationSec = 0; // duration of the currently loaded track
+let elapsedTimerId = null; // timer for webspeech elapsed increments
+
 function resetQueue() {
     stopAll();
     queue.length = 0;
     isPlaying = false;
     useWebSpeech = false;
     speechUtterances = [];
+    totalDurationSec = 0;
+    consumedDurationSec = 0;
+    currentTrackDurationSec = 0;
+    if (elapsedTimerId) {
+        clearInterval(elapsedTimerId);
+        elapsedTimerId = null;
+    }
 }
 
 function urlFromBuffer(buffer, mime) {
@@ -44,7 +57,22 @@ async function playNext() {
 
 audioEl.addEventListener("ended", () => {
     isPlaying = false;
+    if (currentTrackDurationSec && isFinite(currentTrackDurationSec)) {
+        consumedDurationSec += currentTrackDurationSec;
+    }
+    currentTrackDurationSec = 0;
     playNext();
+});
+
+audioEl.addEventListener("loadedmetadata", () => {
+    const d = Number(audioEl.duration) || 0;
+    if (d && isFinite(d)) {
+        currentTrackDurationSec = d;
+        // Ensure total includes current track if it wasn't accounted yet
+        if (totalDurationSec < consumedDurationSec + d) {
+            totalDurationSec = consumedDurationSec + d;
+        }
+    }
 });
 
 function stopAll() {
@@ -55,6 +83,10 @@ function stopAll() {
     isPlaying = false;
     if ("speechSynthesis" in window) {
         window.speechSynthesis.cancel();
+    }
+    if (elapsedTimerId) {
+        clearInterval(elapsedTimerId);
+        elapsedTimerId = null;
     }
 }
 
@@ -93,6 +125,24 @@ function webspeechStart(text) {
         console.warn("Web Speech API not available");
         return;
     }
+    // Estimate total duration from word count
+    const words = (text.trim().match(/\b\w+\b/g) || []).length;
+    const wordsPerMinute = 160; // typical speaking rate
+    totalDurationSec = words ? (words / wordsPerMinute) * 60 : 0;
+    consumedDurationSec = 0;
+    currentTrackDurationSec = 0;
+    if (elapsedTimerId) {
+        clearInterval(elapsedTimerId);
+    }
+    elapsedTimerId = setInterval(() => {
+        try {
+            if (!useWebSpeech) return;
+            const synth = window.speechSynthesis;
+            if (synth?.speaking && !synth?.paused) {
+                consumedDurationSec += 0.5; // increment every half second
+            }
+        } catch {}
+    }, 500);
     const sentences = text
         .replace(/\s+/g, " ")
         .split(/(?<=[.!?])\s+(?=[A-Z0-9"'\(\[])|\n+/)
@@ -128,12 +178,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 paused = Boolean(audioEl?.paused);
                 playing = Boolean(isPlaying) && !paused;
             }
+            let elapsed = 0;
+            if (useWebSpeech) {
+                elapsed = consumedDurationSec;
+            } else {
+                const ct = Number(audioEl?.currentTime) || 0;
+                elapsed = consumedDurationSec + ct;
+            }
+            let total = totalDurationSec || 0;
+            if (elapsed > total) total = elapsed; // never report total smaller than elapsed
             sendResponse?.({
                 ok: true,
                 playing,
                 paused,
                 provider,
                 queueLength: queue.length,
+                elapsedSec: elapsed,
+                totalSec: total,
             });
             return;
         }
@@ -145,6 +206,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (message.type === "queue_append_audio") {
             const b = new Uint8Array(message.payload.buffer);
             queue.push({ buffer: b, mime: message.payload.mime });
+            // Probe duration and add to total
+            try {
+                const probeUrl = urlFromBuffer(b, message.payload.mime);
+                const probe = new Audio();
+                probe.preload = "metadata";
+                probe.src = probeUrl;
+                const onLoaded = () => {
+                    const d = Number(probe.duration) || 0;
+                    if (d && isFinite(d)) totalDurationSec += d;
+                    try { URL.revokeObjectURL(probeUrl); } catch {}
+                    probe.removeEventListener("loadedmetadata", onLoaded);
+                };
+                probe.addEventListener("loadedmetadata", onLoaded);
+            } catch {}
             // Autoplay next if idle
             if (!isPlaying) playNext();
             sendResponse?.({ ok: true });

@@ -35,6 +35,13 @@ async function send(type, extra = {}) {
 let playing = false;
 let paused = false;
 
+function formatTime(totalSec) {
+    const s = Math.max(0, Math.floor(totalSec || 0));
+    const mm = String(Math.floor(s / 60)).padStart(2, "0");
+    const ss = String(s % 60).padStart(2, "0");
+    return `${mm}:${ss}`;
+}
+
 function updateToggleLabel() {
     const btn = qs("toggle");
     if (!btn) return;
@@ -71,6 +78,10 @@ async function onRead() {
     playing = true;
     paused = false;
     updateToggleLabel();
+    const elapsedEl = qs("elapsed");
+    const totalEl = qs("total");
+    if (elapsedEl) elapsedEl.textContent = "00:00";
+    if (totalEl) totalEl.textContent = "--:--";
 }
 
 async function onStop() {
@@ -79,6 +90,10 @@ async function onStop() {
     playing = false;
     paused = false;
     updateToggleLabel();
+    const elapsedEl = qs("elapsed");
+    const totalEl = qs("total");
+    if (elapsedEl) elapsedEl.textContent = "00:00";
+    if (totalEl) totalEl.textContent = "--:--";
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -88,8 +103,13 @@ document.addEventListener("DOMContentLoaded", () => {
         .sendMessage({ type: "get_status" })
         .then((res) => {
             if (!res?.ok) return;
-            playing = Boolean(res.playing || res.paused || res.queueLength > 0);
-            paused = Boolean(res.paused);
+            const isActive = Boolean(
+                res.playing ||
+                    res.queueLength > 0 ||
+                    (res.provider === "webspeech" && res.paused)
+            );
+            playing = isActive;
+            paused = Boolean(res.paused && isActive);
             // Set voice dropdown to match current session if available
             if (res.providerUsed === "openai" && res.voice) {
                 const select = qs("voiceSelect");
@@ -138,4 +158,34 @@ document.addEventListener("DOMContentLoaded", () => {
             voiceInp.style.display = "none";
         }
     });
+
+    // Poll playback status and timers
+    setInterval(() => {
+        chrome.runtime
+            .sendMessage({ type: "get_status" })
+            .then((res) => {
+                if (!res?.ok) return;
+                const isActive = Boolean(
+                    res.playing ||
+                        res.queueLength > 0 ||
+                        (res.provider === "webspeech" && res.paused)
+                );
+                playing = isActive;
+                paused = Boolean(res.paused && isActive);
+                updateToggleLabel();
+                const elapsedEl = qs("elapsed");
+                const totalEl = qs("total");
+                if (elapsedEl && typeof res.elapsedSec === "number") {
+                    elapsedEl.textContent = formatTime(res.elapsedSec);
+                }
+                if (totalEl) {
+                    if (typeof res.totalSec === "number" && res.totalSec > 0) {
+                        totalEl.textContent = formatTime(res.totalSec);
+                    } else {
+                        totalEl.textContent = "--:--";
+                    }
+                }
+            })
+            .catch(() => {});
+    }, 1000);
 });
