@@ -13,6 +13,11 @@ let totalDurationSec = 0; // sum of durations of all enqueued audio (or estimate
 let consumedDurationSec = 0; // sum of durations already finished (or elapsed for webspeech)
 let currentTrackDurationSec = 0; // duration of the currently loaded track
 let elapsedTimerId = null; // timer for webspeech elapsed increments
+let expectedCount = 0; // number of chunks expected from background
+let probedCount = 0; // number of chunks with known duration
+let totalReady = false; // true when durations for all expected chunks are known
+let usingEstimate = false; // true when reporting an estimated total
+let totalEstimateSec = 0; // estimated total seconds
 
 function resetQueue() {
     stopAll();
@@ -27,6 +32,11 @@ function resetQueue() {
         clearInterval(elapsedTimerId);
         elapsedTimerId = null;
     }
+    expectedCount = 0;
+    probedCount = 0;
+    totalReady = false;
+    usingEstimate = false;
+    totalEstimateSec = 0;
 }
 
 function urlFromBuffer(buffer, mime) {
@@ -131,6 +141,9 @@ function webspeechStart(text) {
     totalDurationSec = words ? (words / wordsPerMinute) * 60 : 0;
     consumedDurationSec = 0;
     currentTrackDurationSec = 0;
+    totalEstimateSec = totalDurationSec;
+    usingEstimate = totalEstimateSec > 0;
+    totalReady = false;
     if (elapsedTimerId) {
         clearInterval(elapsedTimerId);
     }
@@ -185,7 +198,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 const ct = Number(audioEl?.currentTime) || 0;
                 elapsed = consumedDurationSec + ct;
             }
-            let total = totalDurationSec || 0;
+            let total = 0;
+            if (totalReady) {
+                total = totalDurationSec || 0;
+            } else if (usingEstimate) {
+                total = totalEstimateSec || 0;
+            }
             if (elapsed > total) total = elapsed; // never report total smaller than elapsed
             sendResponse?.({
                 ok: true,
@@ -195,11 +213,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 queueLength: queue.length,
                 elapsedSec: elapsed,
                 totalSec: total,
+                totalReady,
+                usingEstimate,
             });
             return;
         }
         if (message.type === "queue_reset") {
             resetQueue();
+            sendResponse?.({ ok: true });
+            return;
+        }
+        if (message.type === "queue_set_expected") {
+            const payload = message.payload || {};
+            expectedCount = Number(payload.expectedCount) || 0;
+            totalEstimateSec = Number(payload.totalEstimateSec) || 0;
+            usingEstimate = totalEstimateSec > 0;
+            totalReady = false;
             sendResponse?.({ ok: true });
             return;
         }
@@ -217,6 +246,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     if (d && isFinite(d)) totalDurationSec += d;
                     try { URL.revokeObjectURL(probeUrl); } catch {}
                     probe.removeEventListener("loadedmetadata", onLoaded);
+                    probedCount += 1;
+                    if (expectedCount && probedCount >= expectedCount) {
+                        totalReady = true;
+                        usingEstimate = false;
+                    }
                 };
                 probe.addEventListener("loadedmetadata", onLoaded);
             } catch {}

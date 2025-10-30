@@ -214,6 +214,9 @@ async function startReadingCurrentPage(providerOverride, voiceOverride) {
     }
 
     const chunks = chunkTextBySentences(text);
+    // Quick duration estimate from word count (approx 160 wpm)
+    const wordCount = (text.trim().match(/\b\w+\b/g) || []).length;
+    const totalEstimateSec = wordCount ? (wordCount / 160) * 60 : 0;
 
     // Record current session details
     currentSession = {
@@ -232,6 +235,11 @@ async function startReadingCurrentPage(providerOverride, voiceOverride) {
     try {
         // Notify offscreen to prepare queue
         await sendToOffscreen({ type: "queue_reset" });
+        // Send expected chunk count and total estimate so total can be displayed immediately
+        await sendToOffscreen({
+            type: "queue_set_expected",
+            payload: { expectedCount: chunks.length, totalEstimateSec },
+        });
 
         // Fetch and enqueue first chunk, start playback ASAP
         // Use WAV for the first chunk to reduce synthesis latency, then MP3 for the rest

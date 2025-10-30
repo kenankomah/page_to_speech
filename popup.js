@@ -179,7 +179,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     elapsedEl.textContent = formatTime(res.elapsedSec);
                 }
                 if (totalEl) {
-                    if (typeof res.totalSec === "number" && res.totalSec > 0) {
+                    if (
+                        (res.totalReady || res.usingEstimate) &&
+                        typeof res.totalSec === "number" &&
+                        res.totalSec > 0
+                    ) {
                         totalEl.textContent = formatTime(res.totalSec);
                     } else {
                         totalEl.textContent = "--:--";
